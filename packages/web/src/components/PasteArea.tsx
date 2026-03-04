@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { decodePayload } from "@/lib/payload/decode";
 import { validatePayload } from "@/lib/payload/validate";
@@ -27,6 +27,15 @@ export function PasteArea() {
     }
   }
 
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (value.trim()) {
+        handleSubmit();
+      }
+    }
+  }
+
   return (
     <div className="w-full max-w-2xl">
       <textarea
@@ -35,6 +44,7 @@ export function PasteArea() {
         autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
       />
       {error && <p className="mt-2 text-red-400 text-sm">{error}</p>}
       <button
