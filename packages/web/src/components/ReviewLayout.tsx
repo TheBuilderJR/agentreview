@@ -216,12 +216,12 @@ export function ReviewLayout({ payload, sessionId }: ReviewLayoutProps) {
                 return (
                   <div
                     key={file.path}
-                    className="border border-gray-700 rounded-lg overflow-hidden bg-gray-900"
+                    className="border border-gray-700 rounded-lg bg-gray-900"
                   >
                     {/* File header — always visible */}
                     <button
                       onClick={() => toggleFile(file.path)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-800/50 transition-colors"
+                      className="sticky top-0 z-20 w-full flex items-center gap-3 px-4 py-2.5 text-left bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/80 hover:bg-gray-800/90 transition-colors border-b border-gray-800"
                     >
                       <span className={`transition-transform text-gray-500 text-xs ${isExpanded ? "rotate-90" : ""}`}>
                         ▶
@@ -241,7 +241,7 @@ export function ReviewLayout({ payload, sessionId }: ReviewLayoutProps) {
 
                     {/* Expanded content */}
                     {isExpanded && (
-                      <div className="border-t border-gray-700">
+                      <div>
                         <DiffView file={file} />
                       </div>
                     )}
