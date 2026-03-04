@@ -266,14 +266,18 @@ export function ReviewLayout({ payload, sessionId }: ReviewLayoutProps) {
                               }}
                               className="text-xs text-gray-400 hover:text-blue-400 transition-colors"
                             >
-                              {isFullFile ? "Show diff" : "Show full file"}
+                              {isFullFile ? "Hide full file" : "Show full file"}
                             </button>
                           </div>
                         )}
-                        {isFullFile ? (
-                          <FullFileView file={file} />
-                        ) : (
-                          <DiffView file={file} />
+                        <DiffView file={file} />
+                        {isFullFile && (
+                          <div className="border-t border-gray-700 bg-gray-950/30">
+                            <div className="px-4 py-2 text-xs uppercase tracking-wide text-gray-400 border-b border-gray-800">
+                              Full file
+                            </div>
+                            <FullFileView file={file} />
+                          </div>
                         )}
                       </div>
                     )}
