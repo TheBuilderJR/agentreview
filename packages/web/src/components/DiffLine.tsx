@@ -9,9 +9,21 @@ interface DiffLineProps {
   onClickLineNumber: (lineNumber: number, content: string) => void;
   highlighted?: boolean;
   tokens?: ThemedToken[];
+  foldable?: boolean;
+  folded?: boolean;
+  onToggleFold?: () => void;
 }
 
-export function DiffLine({ change, content, onClickLineNumber, highlighted, tokens }: DiffLineProps) {
+export function DiffLine({
+  change,
+  content,
+  onClickLineNumber,
+  highlighted,
+  tokens,
+  foldable = false,
+  folded = false,
+  onToggleFold,
+}: DiffLineProps) {
   const isAdd = change.type === "add";
   const isDel = change.type === "del";
   const isNormal = change.type === "normal";
@@ -39,6 +51,26 @@ export function DiffLine({ change, content, onClickLineNumber, highlighted, toke
     <div
       className={`flex font-mono text-xs leading-6 ${bgClass} ${highlighted ? "ring-1 ring-blue-500 ring-inset" : ""} group`}
     >
+      <button
+        type="button"
+        onClick={onToggleFold}
+        disabled={!foldable}
+        className={`w-6 shrink-0 select-none ${
+          foldable
+            ? "text-gray-500 hover:text-blue-400"
+            : "text-gray-800 cursor-default"
+        }`}
+        aria-label={
+          foldable
+            ? folded
+              ? "Expand folded block"
+              : "Fold block"
+            : undefined
+        }
+        title={foldable ? (folded ? "Expand folded block" : "Fold block") : undefined}
+      >
+        {foldable ? (folded ? "▶" : "▼") : ""}
+      </button>
       <button
         onClick={() => onClickLineNumber(clickableLineNum, content)}
         className="w-10 text-right text-gray-600 hover:text-blue-400 hover:bg-gray-800 px-1 select-none shrink-0 cursor-pointer"
