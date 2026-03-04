@@ -362,6 +362,22 @@ export function DiffView({ file }: DiffViewProps) {
     []
   );
 
+  const expandAllGapContext = useCallback(
+    (gapIndex: number) => {
+      const bounds = getGapBounds(gapIndex);
+      if (!bounds) return;
+
+      const totalHiddenLines = bounds.end - bounds.start + 1;
+      if (totalHiddenLines <= 0) return;
+
+      setExpandedContextByGap((prev) => ({
+        ...prev,
+        [gapIndex]: { up: 0, down: totalHiddenLines },
+      }));
+    },
+    [getGapBounds]
+  );
+
   // Build a map of line content -> tokens for syntax highlighting
   const tokenMap = useMemo(() => {
     if (!highlighter || !file.language) return null;
@@ -471,6 +487,13 @@ export function DiffView({ file }: DiffViewProps) {
               className="rounded border border-gray-700 px-1.5 text-[11px] text-gray-300 hover:border-gray-500 hover:text-white"
             >
               ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => expandAllGapContext(gapIndex)}
+              className="rounded border border-gray-700 px-1.5 text-[11px] text-gray-300 hover:border-gray-500 hover:text-white"
+            >
+              Expand all
             </button>
             <span className="text-[11px] text-gray-500">
               {remainingHidden} hidden line{remainingHidden === 1 ? "" : "s"}
