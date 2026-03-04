@@ -32,6 +32,7 @@ export function PasteArea() {
       <textarea
         className="w-full h-64 bg-gray-900 border border-gray-700 rounded-lg p-4 font-mono text-sm text-gray-300 focus:outline-none focus:border-blue-500 resize-none"
         placeholder="Paste your ===AGENTREVIEW:v1=== payload here..."
+        autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
       />
