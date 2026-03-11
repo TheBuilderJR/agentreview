@@ -33,6 +33,15 @@ Common use cases:
     Save a feature-branch review payload to a file for later use.
   git add -p && agentreview --staged
     Review only the hunks you intentionally staged.
+
+\b
+Notes:
+  Use only one of --staged, --branch, or --commit.
+  COMMIT can be any git commit-ish, such as a SHA, tag, or ref like HEAD~3.
+
+\b
+Web UI:
+  https://agentreview-web.vercel.app/
 """
 
 
@@ -54,7 +63,7 @@ Common use cases:
     default=None,
     metavar="COMMIT",
     help=(
-        "Compare your current worktree against COMMIT. "
+        "Compare your current worktree against COMMIT (SHA, tag, or other git ref). "
         "Includes committed changes since COMMIT plus local uncommitted changes."
     ),
 )

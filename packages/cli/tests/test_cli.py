@@ -65,6 +65,9 @@ class HelpTextTests(unittest.TestCase):
         self.assertIn("agentreview --commit HEAD~3", result.output)
         self.assertIn("Common use cases:", result.output)
         self.assertIn("git add -p && agentreview --staged", result.output)
+        self.assertIn("Use only one of --staged, --branch, or --commit.", result.output)
+        self.assertIn("COMMIT can be any git commit-ish", result.output)
+        self.assertIn("https://agentreview-web.vercel.app/", result.output)
 
 
 class CliModeValidationTests(unittest.TestCase):
