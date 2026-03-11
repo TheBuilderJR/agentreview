@@ -20,6 +20,8 @@ Examples:
     Review only what is staged for the next commit.
   agentreview --branch main
     Review everything on your branch relative to main, including local uncommitted changes.
+  agentreview --commit HEAD~3
+    Review everything since a specific commit, including local uncommitted changes.
   agentreview --branch origin/main
     Compare against the remote-tracking branch instead of a local branch ref.
 
@@ -46,23 +48,42 @@ Common use cases:
         "Includes committed branch changes plus local uncommitted changes."
     ),
 )
-def main(staged: bool, base_branch: str | None) -> None:
+@click.option(
+    "--commit",
+    "base_commit",
+    default=None,
+    metavar="COMMIT",
+    help=(
+        "Compare your current worktree against COMMIT. "
+        "Includes committed changes since COMMIT plus local uncommitted changes."
+    ),
+)
+def main(staged: bool, base_branch: str | None, base_commit: str | None) -> None:
     """Generate an LLM-friendly code review payload from git changes.
 
     Default mode includes staged, unstaged, and untracked file changes.
     """
+    selected_modes = sum(
+        1 for enabled in (staged, base_branch is not None, base_commit is not None) if enabled
+    )
+    if selected_modes > 1:
+        raise click.UsageError("Choose only one of --staged, --branch, or --commit.")
+
     if base_branch is not None:
         diff_mode = "branch"
-        base = base_branch or "main"
+        base_ref = base_branch or "main"
+    elif base_commit is not None:
+        diff_mode = "commit"
+        base_ref = base_commit
     elif staged:
         diff_mode = "staged"
-        base = "main"
+        base_ref = "main"
     else:
         diff_mode = "default"
-        base = "main"
+        base_ref = "main"
 
     try:
-        diff = get_diff(diff_mode, base)
+        diff = get_diff(diff_mode, base_ref)
     except Exception as exc:
         click.echo(f"Error running git diff: {exc}", err=True)
         sys.exit(1)
@@ -71,7 +92,7 @@ def main(staged: bool, base_branch: str | None) -> None:
         click.echo("No changes detected.", err=True)
         sys.exit(1)
 
-    meta = get_metadata(diff_mode, base)
+    meta = get_metadata(diff_mode, base_ref)
     files = get_file_contents(diff)
 
     payload = AgentReviewPayload(meta=meta, files=files)

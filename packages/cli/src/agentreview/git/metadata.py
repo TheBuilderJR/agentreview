@@ -14,7 +14,7 @@ def _git(*args: str) -> str:
 
 
 def get_metadata(
-    diff_mode: Literal["default", "staged", "branch"], base_branch: str
+    diff_mode: Literal["default", "staged", "branch", "commit"], base_ref: str
 ) -> PayloadMeta:
     try:
         remote_url = _git("remote", "get-url", "origin")
@@ -40,5 +40,6 @@ def get_metadata(
         commit_message=commit_message,
         timestamp=datetime.now(timezone.utc).isoformat(),
         diff_mode=diff_mode,
-        base_branch=base_branch if diff_mode == "branch" else None,
+        base_branch=base_ref if diff_mode == "branch" else None,
+        base_commit=base_ref if diff_mode == "commit" else None,
     )

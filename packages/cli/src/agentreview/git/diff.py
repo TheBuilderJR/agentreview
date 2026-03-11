@@ -38,13 +38,16 @@ def _combine_with_untracked(tracked_diff: str) -> str:
     return f"{tracked_diff.rstrip()}\n\n{untracked_diff}\n"
 
 
-def get_diff(mode: Literal["default", "staged", "branch"], base_branch: str) -> str:
+def get_diff(mode: Literal["default", "staged", "branch", "commit"], base_ref: str) -> str:
     match mode:
         case "staged":
             return _run_git(["diff", "--cached"]).stdout
         case "branch":
-            merge_base = _run_git(["merge-base", base_branch, "HEAD"]).stdout.strip()
+            merge_base = _run_git(["merge-base", base_ref, "HEAD"]).stdout.strip()
             tracked_diff = _run_git(["diff", merge_base]).stdout
+            return _combine_with_untracked(tracked_diff)
+        case "commit":
+            tracked_diff = _run_git(["diff", base_ref]).stdout
             return _combine_with_untracked(tracked_diff)
         case _:
             tracked_diff = _run_git(["diff", "HEAD"]).stdout

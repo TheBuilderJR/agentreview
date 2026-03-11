@@ -4,10 +4,11 @@ export interface AgentReviewPayload {
     repo: string;
     branch: string;
     baseBranch?: string;
+    baseCommit?: string;
     commitHash: string;
     commitMessage: string;
     timestamp: string;
-    diffMode: "default" | "staged" | "branch";
+    diffMode: "default" | "staged" | "branch" | "commit";
   };
   files: AgentReviewFile[];
 }

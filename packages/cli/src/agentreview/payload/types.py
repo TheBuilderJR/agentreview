@@ -28,8 +28,9 @@ class PayloadMeta:
     commit_hash: str
     commit_message: str
     timestamp: str
-    diff_mode: Literal["default", "staged", "branch"]
+    diff_mode: Literal["default", "staged", "branch", "commit"]
     base_branch: str | None = None
+    base_commit: str | None = None
 
     def to_dict(self) -> dict:
         d: dict = {
@@ -42,6 +43,8 @@ class PayloadMeta:
         }
         if self.base_branch is not None:
             d["baseBranch"] = self.base_branch
+        if self.base_commit is not None:
+            d["baseCommit"] = self.base_commit
         return d
 
 

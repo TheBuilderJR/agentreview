@@ -39,6 +39,21 @@ class GetDiffTests(unittest.TestCase):
         )
         get_untracked.assert_called_once_with()
 
+    @patch("agentreview.git.diff._get_untracked_files_diff", return_value="diff --git a/new.txt b/new.txt")
+    @patch("agentreview.git.diff._run_git")
+    def test_commit_mode_includes_uncommitted_and_untracked_changes(self, run_git, get_untracked) -> None:
+        run_git.return_value = _completed("diff --git a/app.py b/app.py\n")
+
+        diff = get_diff("commit", "abc123")
+
+        self.assertEqual(
+            diff,
+            "diff --git a/app.py b/app.py\n\n"
+            "diff --git a/new.txt b/new.txt\n",
+        )
+        run_git.assert_called_once_with(["diff", "abc123"])
+        get_untracked.assert_called_once_with()
+
 
 class HelpTextTests(unittest.TestCase):
     def test_help_includes_examples_and_common_use_cases(self) -> None:
@@ -47,5 +62,14 @@ class HelpTextTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Examples:", result.output)
         self.assertIn("agentreview --branch main", result.output)
+        self.assertIn("agentreview --commit HEAD~3", result.output)
         self.assertIn("Common use cases:", result.output)
         self.assertIn("git add -p && agentreview --staged", result.output)
+
+
+class CliModeValidationTests(unittest.TestCase):
+    def test_rejects_multiple_diff_modes(self) -> None:
+        result = CliRunner().invoke(main, ["--branch", "main", "--commit", "abc123"])
+
+        self.assertEqual(result.exit_code, 2)
+        self.assertIn("Choose only one of --staged, --branch, or --commit.", result.output)
