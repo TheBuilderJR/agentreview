@@ -41,23 +41,23 @@ def _raise_command_error(result: subprocess.CompletedProcess[str]) -> None:
     )
 
 
-def _supports_modern_hg_diff(stderr: str) -> bool:
+def _is_unsupported_hg_option(stderr: str, option: str) -> bool:
     normalized = stderr.lower()
     unsupported_markers = ("unknown option", "not recognized", "no such option")
-    return "--from" not in normalized or not any(marker in normalized for marker in unsupported_markers)
+    return option in normalized and any(marker in normalized for marker in unsupported_markers)
 
 
 def _run_hg_diff_against_working_copy(repo: Repository, revision: str) -> str:
-    modern = _run_hg(repo, ["diff", "--git", "--from", revision], check=False)
-    if modern.returncode == 0:
-        return modern.stdout
-    if _supports_modern_hg_diff(modern.stderr):
-        _raise_command_error(modern)
-
     legacy = _run_hg(repo, ["diff", "--git", "-r", revision], check=False)
     if legacy.returncode == 0:
         return legacy.stdout
-    _raise_command_error(legacy)
+    if not _is_unsupported_hg_option(legacy.stderr, "-r"):
+        _raise_command_error(legacy)
+
+    modern = _run_hg(repo, ["diff", "--git", "--from", revision], check=False)
+    if modern.returncode == 0:
+        return modern.stdout
+    _raise_command_error(modern)
 
 
 def _new_file_mode(path: str) -> str:

@@ -103,7 +103,7 @@ class GetDiffTests(unittest.TestCase):
             [
                 unittest.mock.call(repo, ["log", "-r", "default", "--template", "{node}"]),
                 unittest.mock.call(repo, ["log", "-r", "ancestor(., 1234567890abcdef)", "--template", "{node}"]),
-                unittest.mock.call(repo, ["diff", "--git", "--from", "abcdef1234567890"], check=False),
+                unittest.mock.call(repo, ["diff", "--git", "-r", "abcdef1234567890"], check=False),
             ],
         )
         get_untracked.assert_called_once_with(repo)
@@ -113,10 +113,29 @@ class GetDiffTests(unittest.TestCase):
         return_value="diff --git a/new.txt b/new.txt",
     )
     @patch("agentreview.git.diff._run_hg")
-    def test_hg_commit_mode_falls_back_to_legacy_rev_flag(self, run_hg, get_untracked) -> None:
+    def test_hg_commit_mode_uses_legacy_rev_flag(self, run_hg, get_untracked) -> None:
+        repo = Repository(kind="hg", root="/repo")
+        run_hg.return_value = _completed("diff --git a/app.py b/app.py\n", args=["hg"])
+
+        diff = get_diff(repo, "commit", "abc123")
+
+        self.assertEqual(
+            diff,
+            "diff --git a/app.py b/app.py\n\n"
+            "diff --git a/new.txt b/new.txt\n",
+        )
+        run_hg.assert_called_once_with(repo, ["diff", "--git", "-r", "abc123"], check=False)
+        get_untracked.assert_called_once_with(repo)
+
+    @patch(
+        "agentreview.git.diff._get_untracked_files_diff",
+        return_value="diff --git a/new.txt b/new.txt",
+    )
+    @patch("agentreview.git.diff._run_hg")
+    def test_hg_commit_mode_falls_back_to_modern_from_flag(self, run_hg, get_untracked) -> None:
         repo = Repository(kind="hg", root="/repo")
         run_hg.side_effect = [
-            _failed("hg diff: option --from not recognized\n", args=["hg"]),
+            _failed("hg diff: option -r not recognized\n", args=["hg"]),
             _completed("diff --git a/app.py b/app.py\n", args=["hg"]),
         ]
 
@@ -130,8 +149,8 @@ class GetDiffTests(unittest.TestCase):
         self.assertEqual(
             run_hg.call_args_list,
             [
-                unittest.mock.call(repo, ["diff", "--git", "--from", "abc123"], check=False),
                 unittest.mock.call(repo, ["diff", "--git", "-r", "abc123"], check=False),
+                unittest.mock.call(repo, ["diff", "--git", "--from", "abc123"], check=False),
             ],
         )
         get_untracked.assert_called_once_with(repo)
