@@ -8,9 +8,11 @@ import click
 from .git.diff import get_diff
 from .git.files import get_file_contents
 from .git.metadata import get_metadata
-from .payload.encode import encode_payload
+from .payload.encode import write_payload
 from .payload.types import AgentReviewPayload
-from .vcs import detect_repository, emit_verbose
+from .vcs import detect_repository, emit_verbose, verbose_activity
+
+TERMINAL_OUTPUT_WARNING_BYTES = 10 * 1024 * 1024
 
 
 HELP_EPILOG = """
@@ -50,7 +52,12 @@ Web UI:
 
 @click.command(epilog=HELP_EPILOG)
 @click.option("--staged", is_flag=True, help="Only include staged changes (Git only; uses git diff --cached).")
-@click.option("-v", "--verbose", is_flag=True, help="Print progress and underlying git/sl commands to stderr.")
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Print timestamped progress and underlying git/sl commands to stderr.",
+)
 @click.option(
     "--branch",
     "base_branch",
@@ -120,7 +127,8 @@ def main(staged: bool, verbose: bool, base_branch: str | None, base_commit: str 
         click.echo("No changes detected.", err=True)
         sys.exit(1)
 
-    emit_verbose(verbose, f"diff bytes={len(diff.encode('utf-8'))}")
+    diff_bytes = len(diff.encode("utf-8"))
+    emit_verbose(verbose, f"diff bytes={diff_bytes}")
     emit_verbose(verbose, "collecting metadata")
     meta = get_metadata(repository, diff_mode, base_ref)
     emit_verbose(
@@ -128,10 +136,18 @@ def main(staged: bool, verbose: bool, base_branch: str | None, base_commit: str 
         f"metadata repo={meta.repo} branch={meta.branch} commit={meta.commit_hash}",
     )
     emit_verbose(verbose, "extracting file contents")
-    files = get_file_contents(repository, diff)
+    with verbose_activity(verbose, "extracting file contents"):
+        files = get_file_contents(repository, diff)
     emit_verbose(verbose, f"files={len(files)}")
 
     payload = AgentReviewPayload(meta=meta, files=files)
-    emit_verbose(verbose, "encoding payload")
-    encoded = encode_payload(payload)
-    click.echo(encoded)
+    if verbose and sys.stdout.isatty() and diff_bytes >= TERMINAL_OUTPUT_WARNING_BYTES:
+        emit_verbose(
+            True,
+            "stdout is a terminal; writing a very large payload may be slow. Pipe to pbcopy or a file to avoid terminal rendering overhead.",
+        )
+    emit_verbose(verbose, "writing payload")
+    with verbose_activity(verbose, "writing payload"):
+        write_payload(payload, sys.stdout)
+        sys.stdout.write("\n")
+        sys.stdout.flush()

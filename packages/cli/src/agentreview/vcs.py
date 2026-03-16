@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
+from datetime import datetime
+from time import monotonic
 from typing import Literal
 
 VCSKind = Literal["git", "sl"]
+VERBOSE_PROGRESS_INTERVAL_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -19,7 +24,30 @@ class Repository:
 
 def emit_verbose(enabled: bool, message: str) -> None:
     if enabled:
-        print(f"[agentreview] {message}", file=sys.stderr, flush=True)
+        timestamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
+        print(f"[agentreview {timestamp}] {message}", file=sys.stderr, flush=True)
+
+
+@contextmanager
+def verbose_activity(enabled: bool, label: str):
+    start = monotonic()
+    stop = threading.Event()
+    thread: threading.Thread | None = None
+
+    def tick() -> None:
+        while not stop.wait(VERBOSE_PROGRESS_INTERVAL_SECONDS):
+            emit_verbose(enabled, f"{label} still running ({monotonic() - start:.1f}s elapsed)")
+
+    if enabled:
+        thread = threading.Thread(target=tick, daemon=True)
+        thread.start()
+
+    try:
+        yield
+    finally:
+        if thread is not None:
+            stop.set()
+            thread.join()
 
 
 def _format_command(binary: str, args: list[str]) -> str:
@@ -33,15 +61,18 @@ def run_command(
     *,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    emit_verbose(repo.verbose, f"$ {_format_command(binary, args)}")
-    result = subprocess.run(
-        [binary, *args],
-        capture_output=True,
-        text=True,
-        cwd=repo.root,
-        check=False,
-    )
-    emit_verbose(repo.verbose, f"{binary} exit={result.returncode}")
+    command = _format_command(binary, args)
+    emit_verbose(repo.verbose, f"$ {command}")
+    start = monotonic()
+    with verbose_activity(repo.verbose, command):
+        result = subprocess.run(
+            [binary, *args],
+            capture_output=True,
+            text=True,
+            cwd=repo.root,
+            check=False,
+        )
+    emit_verbose(repo.verbose, f"{binary} exit={result.returncode} elapsed={monotonic() - start:.3f}s")
 
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
@@ -65,15 +96,18 @@ def _probe_repository(
         emit_verbose(verbose, f"{binary} not found in PATH")
         return None
 
-    emit_verbose(verbose, f"$ {_format_command(binary, args)}")
-    result = subprocess.run(
-        [binary, *args],
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        check=False,
-    )
-    emit_verbose(verbose, f"{binary} probe exit={result.returncode}")
+    command = _format_command(binary, args)
+    emit_verbose(verbose, f"$ {command}")
+    start = monotonic()
+    with verbose_activity(verbose, command):
+        result = subprocess.run(
+            [binary, *args],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            check=False,
+        )
+    emit_verbose(verbose, f"{binary} probe exit={result.returncode} elapsed={monotonic() - start:.3f}s")
     if result.returncode != 0:
         return None
 

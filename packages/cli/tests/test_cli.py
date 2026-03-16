@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from io import StringIO
+import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -9,7 +11,8 @@ from click.testing import CliRunner
 from agentreview.cli import main
 from agentreview.git.diff import get_diff
 from agentreview.git.metadata import get_metadata
-from agentreview.payload.types import PayloadMeta
+from agentreview.payload.encode import encode_payload, write_payload
+from agentreview.payload.types import AgentReviewFile, AgentReviewPayload, PayloadMeta
 from agentreview.vcs import Repository
 
 
@@ -146,6 +149,37 @@ class HelpTextTests(unittest.TestCase):
         self.assertIn("https://agentreview-web.vercel.app/", result.output)
 
 
+class PayloadEncodingTests(unittest.TestCase):
+    def test_write_payload_matches_encode_payload(self) -> None:
+        meta = PayloadMeta(
+            repo="agentreview",
+            branch="main",
+            commit_hash="abc123",
+            commit_message="Test commit",
+            timestamp="2026-03-16T00:00:00+00:00",
+            diff_mode="commit",
+            base_commit="abc123",
+        )
+
+        payload = AgentReviewPayload(
+            meta=meta,
+            files=[
+                AgentReviewFile(
+                    path="app.py",
+                    status="modified",
+                    diff="diff --git a/app.py b/app.py\n",
+                    source="print('hello')\n",
+                    language="python",
+                )
+            ],
+        )
+
+        output = StringIO()
+        write_payload(payload, output)
+
+        self.assertEqual(output.getvalue(), encode_payload(payload))
+
+
 class CliModeValidationTests(unittest.TestCase):
     def test_rejects_multiple_diff_modes(self) -> None:
         result = CliRunner().invoke(main, ["--branch", "main", "--commit", "abc123"])
@@ -204,13 +238,34 @@ class CliModeValidationTests(unittest.TestCase):
         result = CliRunner().invoke(main, ["-v", "--commit", "abc123"])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("[agentreview] mode=commit base=abc123", result.output)
-        self.assertIn("[agentreview] diff bytes=", result.output)
-        self.assertIn("[agentreview] collecting metadata", result.output)
-        self.assertIn("[agentreview] metadata repo=agentreview branch=main commit=abc123", result.output)
-        self.assertIn("[agentreview] extracting file contents", result.output)
-        self.assertIn("[agentreview] files=0", result.output)
-        self.assertIn("[agentreview] encoding payload", result.output)
+        self.assertRegex(
+            result.output,
+            re.compile(r"\[agentreview [^\]]+\] mode=commit base=abc123"),
+        )
+        self.assertRegex(
+            result.output,
+            re.compile(r"\[agentreview [^\]]+\] diff bytes="),
+        )
+        self.assertRegex(
+            result.output,
+            re.compile(r"\[agentreview [^\]]+\] collecting metadata"),
+        )
+        self.assertRegex(
+            result.output,
+            re.compile(r"\[agentreview [^\]]+\] metadata repo=agentreview branch=main commit=abc123"),
+        )
+        self.assertRegex(
+            result.output,
+            re.compile(r"\[agentreview [^\]]+\] extracting file contents"),
+        )
+        self.assertRegex(
+            result.output,
+            re.compile(r"\[agentreview [^\]]+\] files=0"),
+        )
+        self.assertRegex(
+            result.output,
+            re.compile(r"\[agentreview [^\]]+\] writing payload"),
+        )
         detect_repository.assert_called_once_with(verbose=True)
         get_diff_mock.assert_called_once()
         get_metadata_mock.assert_called_once()
