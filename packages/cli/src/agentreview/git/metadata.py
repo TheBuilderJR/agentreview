@@ -14,14 +14,14 @@ def _git(repo: Repository, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _hg(repo: Repository, *args: str, check: bool = True) -> str:
-    result = run_command("hg", repo, list(args), check=check)
+def _sl(repo: Repository, *args: str, check: bool = True) -> str:
+    result = run_command("sl", repo, list(args), check=check)
     return result.stdout.strip()
 
 
 def _repo_name(remote_url: str, root: str) -> str:
     if remote_url:
-        normalized = remote_url.rstrip("/").removesuffix(".git").removesuffix(".hg")
+        normalized = remote_url.rstrip("/").removesuffix(".git")
         return re.split(r"[:/]", normalized)[-1]
 
     return os.path.basename(root)
@@ -41,14 +41,15 @@ def get_metadata(
         commit_message = _git(repo, "log", "-1", "--format=%s")
     else:
         try:
-            remote_url = _hg(repo, "config", "paths.default")
+            remote_url = _sl(repo, "config", "paths.default")
         except subprocess.CalledProcessError:
             remote_url = ""
 
-        bookmark = _hg(repo, "id", "-B", check=False)
-        branch = bookmark or _hg(repo, "branch")
-        commit_hash = _hg(repo, "id", "-i").rstrip("+")
-        commit_message = _hg(repo, "log", "-r", ".", "--template", "{desc|firstline}")
+        active_bookmark = _sl(repo, "log", "-r", ".", "--template", "{activebookmark}", check=False)
+        bookmark = active_bookmark or _sl(repo, "log", "-r", ".", "--template", "{bookmarks}", check=False)
+        branch = bookmark or "(no bookmark)"
+        commit_hash = _sl(repo, "log", "-r", ".", "--template", "{node|short}")
+        commit_message = _sl(repo, "log", "-r", ".", "--template", "{desc|firstline}")
 
     from datetime import datetime, timezone
 

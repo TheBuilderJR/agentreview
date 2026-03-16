@@ -40,7 +40,7 @@ Common use cases:
 Notes:
   Use only one of --staged, --branch, or --commit.
   --staged is only available in Git repositories.
-  COMMIT can be any git commit-ish or Mercurial revision identifier.
+  COMMIT can be any git commit-ish or Sapling revision identifier.
 
 \b
 Web UI:
@@ -50,7 +50,7 @@ Web UI:
 
 @click.command(epilog=HELP_EPILOG)
 @click.option("--staged", is_flag=True, help="Only include staged changes (Git only; uses git diff --cached).")
-@click.option("-v", "--verbose", is_flag=True, help="Print progress and underlying git/hg commands to stderr.")
+@click.option("-v", "--verbose", is_flag=True, help="Print progress and underlying git/sl commands to stderr.")
 @click.option(
     "--branch",
     "base_branch",
@@ -58,7 +58,7 @@ Web UI:
     metavar="BASE",
     help=(
         "Compare your current worktree against the common ancestor with BASE. "
-        "In Mercurial repos, BASE can be a branch, bookmark, or revision."
+        "In Sapling repos, BASE can be a bookmark or revision."
     ),
 )
 @click.option(
@@ -72,7 +72,7 @@ Web UI:
     ),
 )
 def main(staged: bool, verbose: bool, base_branch: str | None, base_commit: str | None) -> None:
-    """Generate an LLM-friendly code review payload from git or hg changes.
+    """Generate an LLM-friendly code review payload from git or sl changes.
 
     Default mode includes staged, unstaged, and untracked file changes.
     """
@@ -121,14 +121,17 @@ def main(staged: bool, verbose: bool, base_branch: str | None, base_commit: str 
         sys.exit(1)
 
     emit_verbose(verbose, f"diff bytes={len(diff.encode('utf-8'))}")
+    emit_verbose(verbose, "collecting metadata")
     meta = get_metadata(repository, diff_mode, base_ref)
     emit_verbose(
         verbose,
         f"metadata repo={meta.repo} branch={meta.branch} commit={meta.commit_hash}",
     )
+    emit_verbose(verbose, "extracting file contents")
     files = get_file_contents(repository, diff)
     emit_verbose(verbose, f"files={len(files)}")
 
     payload = AgentReviewPayload(meta=meta, files=files)
+    emit_verbose(verbose, "encoding payload")
     encoded = encode_payload(payload)
     click.echo(encoded)

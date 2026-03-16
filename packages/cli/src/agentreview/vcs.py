@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from typing import Literal
 
-VCSKind = Literal["git", "hg"]
+VCSKind = Literal["git", "sl"]
 
 
 @dataclass(frozen=True)
@@ -87,15 +87,15 @@ def detect_repository(cwd: str | None = None, *, verbose: bool = False) -> Repos
         emit_verbose(verbose, f"detected git repository at {git_root}")
         return Repository(kind="git", root=git_root, verbose=verbose)
 
-    hg_root = _probe_repository("hg", ["root"], cwd=cwd, verbose=verbose)
-    if hg_root is not None:
-        emit_verbose(verbose, f"detected hg repository at {hg_root}")
-        return Repository(kind="hg", root=hg_root, verbose=verbose)
+    sl_root = _probe_repository("sl", ["root"], cwd=cwd, verbose=verbose)
+    if sl_root is not None:
+        emit_verbose(verbose, f"detected sl repository at {sl_root}")
+        return Repository(kind="sl", root=sl_root, verbose=verbose)
 
-    if shutil.which("git") or shutil.which("hg"):
+    if shutil.which("git") or shutil.which("sl"):
         raise RuntimeError(
             "Current directory is not inside a supported repository. "
-            "agentreview supports git and hg repositories."
+            "agentreview supports git and sl repositories."
         )
 
-    raise RuntimeError("Neither git nor hg is installed. agentreview supports git and hg repositories.")
+    raise RuntimeError("Neither git nor sl is installed. agentreview supports git and sl repositories.")

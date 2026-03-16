@@ -14,38 +14,10 @@ def _run_git(
     return run_command("git", repo, args, check=check)
 
 
-def _run_hg(
+def _run_sl(
     repo: Repository, args: list[str], *, check: bool = True
 ) -> subprocess.CompletedProcess[str]:
-    return run_command("hg", repo, args, check=check)
-
-
-def _raise_command_error(result: subprocess.CompletedProcess[str]) -> None:
-    raise subprocess.CalledProcessError(
-        result.returncode,
-        result.args,
-        output=result.stdout,
-        stderr=result.stderr,
-    )
-
-
-def _is_unsupported_hg_option(stderr: str, option: str) -> bool:
-    normalized = stderr.lower()
-    unsupported_markers = ("unknown option", "not recognized", "no such option")
-    return option in normalized and any(marker in normalized for marker in unsupported_markers)
-
-
-def _run_hg_diff_against_working_copy(repo: Repository, revision: str) -> str:
-    legacy = _run_hg(repo, ["diff", "--git", "-r", revision], check=False)
-    if legacy.returncode == 0:
-        return legacy.stdout
-    if not _is_unsupported_hg_option(legacy.stderr, "-r"):
-        _raise_command_error(legacy)
-
-    modern = _run_hg(repo, ["diff", "--git", "--from", revision], check=False)
-    if modern.returncode == 0:
-        return modern.stdout
-    _raise_command_error(modern)
+    return run_command("sl", repo, args, check=check)
 
 
 def _new_file_mode(path: str) -> str:
@@ -89,7 +61,7 @@ def _get_untracked_files_diff(repo: Repository) -> str:
     if repo.kind == "git":
         untracked = _run_git(repo, ["ls-files", "--others", "--exclude-standard"]).stdout.splitlines()
     else:
-        untracked = _run_hg(repo, ["status", "-un"]).stdout.splitlines()
+        untracked = _run_sl(repo, ["status", "-un", "--root-relative"]).stdout.splitlines()
 
     diffs: list[str] = []
 
@@ -136,24 +108,24 @@ def _get_git_diff(repo: Repository, mode: Literal["default", "staged", "branch",
             return _combine_with_untracked(repo, tracked_diff)
 
 
-def _resolve_hg_node(repo: Repository, revision: str) -> str:
-    return _run_hg(repo, ["log", "-r", revision, "--template", "{node}"]).stdout.strip()
+def _resolve_sl_node(repo: Repository, revision: str) -> str:
+    return _run_sl(repo, ["log", "-r", revision, "--template", "{node}"]).stdout.strip()
 
 
-def _get_hg_diff(repo: Repository, mode: Literal["default", "staged", "branch", "commit"], base_ref: str) -> str:
+def _get_sl_diff(repo: Repository, mode: Literal["default", "staged", "branch", "commit"], base_ref: str) -> str:
     match mode:
         case "staged":
             raise ValueError("--staged is only available in Git repositories.")
         case "branch":
-            base_node = _resolve_hg_node(repo, base_ref)
-            ancestor = _resolve_hg_node(repo, f"ancestor(., {base_node})")
-            tracked_diff = _run_hg_diff_against_working_copy(repo, ancestor)
+            base_node = _resolve_sl_node(repo, base_ref)
+            ancestor = _resolve_sl_node(repo, f"ancestor(., {base_node})")
+            tracked_diff = _run_sl(repo, ["diff", "--git", "-r", ancestor]).stdout
             return _combine_with_untracked(repo, tracked_diff)
         case "commit":
-            tracked_diff = _run_hg_diff_against_working_copy(repo, base_ref)
+            tracked_diff = _run_sl(repo, ["diff", "--git", "-r", base_ref]).stdout
             return _combine_with_untracked(repo, tracked_diff)
         case _:
-            tracked_diff = _run_hg(repo, ["diff", "--git"]).stdout
+            tracked_diff = _run_sl(repo, ["diff", "--git"]).stdout
             return _combine_with_untracked(repo, tracked_diff)
 
 
@@ -162,4 +134,4 @@ def get_diff(
 ) -> str:
     if repo.kind == "git":
         return _get_git_diff(repo, mode, base_ref)
-    return _get_hg_diff(repo, mode, base_ref)
+    return _get_sl_diff(repo, mode, base_ref)
