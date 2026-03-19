@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useHighlighter } from "@/hooks/useHighlighter";
+import { buildFoldRanges } from "@/lib/folding";
 import { type BundledLanguage } from "shiki";
 
 interface CodeBlockProps {
@@ -9,188 +10,27 @@ interface CodeBlockProps {
   language?: string;
 }
 
-type FoldKind = "indent" | "bracket";
-
-interface FoldRange {
-  start: number;
-  end: number;
-  kind: FoldKind;
-}
-
-type OpenBracket = "{" | "[" | "(";
-type CloseBracket = "}" | "]" | ")";
-type QuoteChar = "\"" | "'" | "`";
-
-const CLOSE_TO_OPEN: Record<CloseBracket, OpenBracket> = {
-  "}": "{",
-  "]": "[",
-  ")": "(",
-};
-
-function isBlank(line: string): boolean {
-  return line.trim().length === 0;
-}
-
-function getIndentWidth(line: string): number {
-  let width = 0;
-  for (const char of line) {
-    if (char === " ") {
-      width += 1;
-      continue;
-    }
-    if (char === "\t") {
-      width += 2;
-      continue;
-    }
-    break;
-  }
-  return width;
-}
-
-function buildIndentRanges(lines: string[]): FoldRange[] {
-  const ranges: FoldRange[] = [];
-
-  for (let i = 0; i < lines.length - 1; i++) {
-    if (isBlank(lines[i])) continue;
-
-    const baseIndent = getIndentWidth(lines[i]);
-    let nextLine = i + 1;
-
-    while (nextLine < lines.length && isBlank(lines[nextLine])) {
-      nextLine += 1;
-    }
-
-    if (nextLine >= lines.length) continue;
-
-    const nextIndent = getIndentWidth(lines[nextLine]);
-    if (nextIndent <= baseIndent) continue;
-
-    let end = nextLine;
-    for (let j = nextLine + 1; j < lines.length; j++) {
-      if (isBlank(lines[j])) continue;
-      if (getIndentWidth(lines[j]) <= baseIndent) break;
-      end = j;
-    }
-
-    if (end > i) {
-      ranges.push({ start: i, end, kind: "indent" });
-    }
-  }
-
-  return ranges;
-}
-
-function buildBracketRanges(lines: string[]): FoldRange[] {
-  const ranges: FoldRange[] = [];
-  const stack: Array<{ char: OpenBracket; line: number }> = [];
-  let inBlockComment = false;
-  let inString: QuoteChar | null = null;
-  let escaped = false;
-
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const next = i + 1 < line.length ? line[i + 1] : "";
-
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (char === "\\") {
-          escaped = true;
-          continue;
-        }
-        if (char === inString) {
-          inString = null;
-        }
-        continue;
-      }
-
-      if (inBlockComment) {
-        if (char === "*" && next === "/") {
-          inBlockComment = false;
-          i += 1;
-        }
-        continue;
-      }
-
-      if (char === "/" && next === "/") {
-        break;
-      }
-      if (char === "/" && next === "*") {
-        inBlockComment = true;
-        i += 1;
-        continue;
-      }
-
-      if (char === "\"" || char === "'" || char === "`") {
-        inString = char;
-        escaped = false;
-        continue;
-      }
-
-      if (char === "{" || char === "[" || char === "(") {
-        stack.push({ char, line: lineIndex });
-        continue;
-      }
-
-      if (char === "}" || char === "]" || char === ")") {
-        const expected = CLOSE_TO_OPEN[char];
-        const top = stack[stack.length - 1];
-        if (!top || top.char !== expected) continue;
-
-        stack.pop();
-        if (top.line < lineIndex) {
-          ranges.push({ start: top.line, end: lineIndex, kind: "bracket" });
-        }
-      }
-    }
-
-    escaped = false;
-  }
-
-  return ranges;
-}
-
-function buildFoldRanges(code: string): FoldRange[] {
-  const lines = code.split("\n");
-  const candidates = [...buildBracketRanges(lines), ...buildIndentRanges(lines)];
-  const byStart = new Map<number, FoldRange>();
-
-  for (const range of candidates) {
-    if (range.end <= range.start) continue;
-    const existing = byStart.get(range.start);
-    if (!existing) {
-      byStart.set(range.start, range);
-      continue;
-    }
-
-    if (range.end > existing.end) {
-      byStart.set(range.start, range);
-      continue;
-    }
-
-    if (range.end === existing.end && range.kind === "bracket" && existing.kind === "indent") {
-      byStart.set(range.start, range);
-    }
-  }
-
-  return [...byStart.values()].sort((a, b) => a.start - b.start);
-}
-
 export function CodeBlock({ code, language }: CodeBlockProps) {
   const highlighter = useHighlighter();
   const lines = useMemo(() => code.split("\n"), [code]);
-  const foldRanges = useMemo(() => buildFoldRanges(code), [code]);
+  const foldRanges = useMemo(() => buildFoldRanges(lines, language), [lines, language]);
   const foldStarts = useMemo(() => foldRanges.map((range) => range.start), [foldRanges]);
   const foldRangeByStart = useMemo(
     () => new Map(foldRanges.map((range) => [range.start, range])),
     [foldRanges]
   );
   const [collapsedStarts, setCollapsedStarts] = useState<Set<number>>(new Set());
+
+  const tokenLines = useMemo(() => {
+    if (!highlighter || !language) return null;
+    if (!highlighter.getLoadedLanguages().includes(language as BundledLanguage)) {
+      return null;
+    }
+    return highlighter.codeToTokens(code, {
+      lang: language as BundledLanguage,
+      theme: "github-dark",
+    }).tokens;
+  }, [highlighter, code, language]);
 
   useEffect(() => {
     setCollapsedStarts(new Set());
@@ -203,15 +43,6 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       </div>
     );
   }
-
-  const tokenLines = useMemo(() => {
-    if (!language) return null;
-    if (!highlighter.getLoadedLanguages().includes(language)) return null;
-    return highlighter.codeToTokens(code, {
-      lang: language as BundledLanguage,
-      theme: "github-dark",
-    }).tokens;
-  }, [highlighter, code, language]);
 
   const hasFoldRanges = foldRanges.length > 0;
   const allCollapsed = hasFoldRanges && collapsedStarts.size >= foldRanges.length;

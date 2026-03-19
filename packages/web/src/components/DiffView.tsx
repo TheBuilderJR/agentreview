@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AgentReviewFile } from "@/lib/payload/types";
 import { parseDiffString, type ParsedChange } from "@/lib/diff/parser";
+import { buildFoldRanges, type FoldRange } from "@/lib/folding";
 import { DiffLine } from "./DiffLine";
 import { InlineCommentForm } from "./InlineCommentForm";
 import { InlineComment } from "./InlineComment";
@@ -17,11 +18,6 @@ import {
 
 interface DiffViewProps {
   file: AgentReviewFile;
-}
-
-interface FoldRange {
-  start: number;
-  end: number;
 }
 
 interface ChunkLineRange {
@@ -68,16 +64,6 @@ interface PendingCommentRange {
   endRowKey: string;
 }
 
-type OpenBracket = "{" | "[" | "(";
-type CloseBracket = "}" | "]" | ")";
-type QuoteChar = "\"" | "'" | "`";
-
-const CLOSE_TO_OPEN: Record<CloseBracket, OpenBracket> = {
-  "}": "{",
-  "]": "[",
-  ")": "(",
-};
-
 const CONTEXT_EXPAND_STEP = 20;
 
 function stripDiffPrefix(content: string): string {
@@ -86,149 +72,6 @@ function stripDiffPrefix(content: string): string {
     return content.slice(1);
   }
   return content;
-}
-
-function isBlank(line: string): boolean {
-  return line.trim().length === 0;
-}
-
-function getIndentWidth(line: string): number {
-  let width = 0;
-  for (const char of line) {
-    if (char === " ") {
-      width += 1;
-      continue;
-    }
-    if (char === "\t") {
-      width += 2;
-      continue;
-    }
-    break;
-  }
-  return width;
-}
-
-function buildIndentRanges(lines: string[]): FoldRange[] {
-  const ranges: FoldRange[] = [];
-
-  for (let i = 0; i < lines.length - 1; i++) {
-    if (isBlank(lines[i])) continue;
-
-    const baseIndent = getIndentWidth(lines[i]);
-    let nextLine = i + 1;
-
-    while (nextLine < lines.length && isBlank(lines[nextLine])) {
-      nextLine += 1;
-    }
-
-    if (nextLine >= lines.length) continue;
-
-    const nextIndent = getIndentWidth(lines[nextLine]);
-    if (nextIndent <= baseIndent) continue;
-
-    let end = nextLine;
-    for (let j = nextLine + 1; j < lines.length; j++) {
-      if (isBlank(lines[j])) continue;
-      if (getIndentWidth(lines[j]) <= baseIndent) break;
-      end = j;
-    }
-
-    if (end > i) {
-      ranges.push({ start: i, end });
-    }
-  }
-
-  return ranges;
-}
-
-function buildBracketRanges(lines: string[]): FoldRange[] {
-  const ranges: FoldRange[] = [];
-  const stack: Array<{ char: OpenBracket; line: number }> = [];
-  let inBlockComment = false;
-  let inString: QuoteChar | null = null;
-  let escaped = false;
-
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const next = i + 1 < line.length ? line[i + 1] : "";
-
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (char === "\\") {
-          escaped = true;
-          continue;
-        }
-        if (char === inString) {
-          inString = null;
-        }
-        continue;
-      }
-
-      if (inBlockComment) {
-        if (char === "*" && next === "/") {
-          inBlockComment = false;
-          i += 1;
-        }
-        continue;
-      }
-
-      if (char === "/" && next === "/") {
-        break;
-      }
-      if (char === "/" && next === "*") {
-        inBlockComment = true;
-        i += 1;
-        continue;
-      }
-
-      if (char === "\"" || char === "'" || char === "`") {
-        inString = char;
-        escaped = false;
-        continue;
-      }
-
-      if (char === "{" || char === "[" || char === "(") {
-        stack.push({ char, line: lineIndex });
-        continue;
-      }
-
-      if (char === "}" || char === "]" || char === ")") {
-        const expected = CLOSE_TO_OPEN[char];
-        const top = stack[stack.length - 1];
-        if (!top || top.char !== expected) continue;
-
-        stack.pop();
-        if (top.line < lineIndex) {
-          ranges.push({ start: top.line, end: lineIndex });
-        }
-      }
-    }
-
-    escaped = false;
-  }
-
-  return ranges;
-}
-
-function buildFoldRanges(lines: string[]): FoldRange[] {
-  const candidates = [...buildBracketRanges(lines), ...buildIndentRanges(lines)];
-  const byStart = new Map<number, FoldRange>();
-
-  for (const range of candidates) {
-    if (range.end <= range.start) continue;
-    const existing = byStart.get(range.start);
-    if (!existing || range.end > existing.end) {
-      byStart.set(range.start, range);
-    }
-  }
-
-  return [...byStart.values()].sort((a, b) => a.start - b.start);
 }
 
 function foldKey(chunkIndex: number, start: number): string {
@@ -351,7 +194,8 @@ export function DiffView({ file }: DiffViewProps) {
         tokenIndex: tokenIndex++,
       }));
       const foldRanges = buildFoldRanges(
-        preparedChanges.map((preparedChange) => preparedChange.content)
+        preparedChanges.map((preparedChange) => preparedChange.content),
+        file.language
       );
       return {
         content: chunk.content,
@@ -362,7 +206,7 @@ export function DiffView({ file }: DiffViewProps) {
         foldStarts: foldRanges.map((range) => range.start),
       };
     });
-  }, [chunks]);
+  }, [chunks, file.language]);
 
   useEffect(() => {
     setCollapsedFolds(new Set());

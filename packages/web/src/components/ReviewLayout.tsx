@@ -43,6 +43,7 @@ export function ReviewLayout({ payload, sessionId }: ReviewLayoutProps) {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(
     () => new Set(payload.files.map((f) => f.path))
   );
+  const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportDiffOpen, setExportDiffOpen] = useState(false);
   const [hotkeysOpen, setHotkeysOpen] = useState(false);
@@ -69,6 +70,12 @@ export function ReviewLayout({ payload, sessionId }: ReviewLayoutProps) {
     setExpandedFiles(new Set());
   }, []);
 
+  const copyFile = useCallback(async (file: AgentReviewFile) => {
+    const text = file.source ?? file.diff;
+    await navigator.clipboard.writeText(text);
+    setCopiedFilePath(file.path);
+  }, []);
+
   const allExpanded = expandedFiles.size === payload.files.length;
   const hasOpenModal = hotkeysOpen || exportOpen || exportDiffOpen;
 
@@ -87,6 +94,16 @@ export function ReviewLayout({ payload, sessionId }: ReviewLayoutProps) {
       document.body.style.overflow = previousOverflow;
     };
   }, [hasOpenModal]);
+
+  useEffect(() => {
+    if (!copiedFilePath) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setCopiedFilePath((current) => (current === copiedFilePath ? null : current));
+    }, 2000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [copiedFilePath]);
 
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null): boolean {
@@ -219,25 +236,40 @@ export function ReviewLayout({ payload, sessionId }: ReviewLayoutProps) {
                     className="border border-gray-700 rounded-lg bg-gray-900"
                   >
                     {/* File header — always visible */}
-                    <button
-                      onClick={() => toggleFile(file.path)}
-                      className="sticky top-0 z-20 w-full flex items-center gap-3 px-4 py-2.5 text-left bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/80 hover:bg-gray-800/90 transition-colors border-b border-gray-800"
-                    >
-                      <span className={`transition-transform text-gray-500 text-xs ${isExpanded ? "rotate-90" : ""}`}>
-                        ▶
-                      </span>
-                      <span className={`font-mono text-xs font-bold ${STATUS_COLORS[file.status]}`}>
-                        {STATUS_LABELS[file.status]}
-                      </span>
-                      <span className="text-sm font-mono text-gray-200 truncate flex-1">
-                        {file.path}
-                      </span>
+                    <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-2.5 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/80 border-b border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => toggleFile(file.path)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left hover:text-white transition-colors"
+                      >
+                        <span className={`transition-transform text-gray-500 text-xs ${isExpanded ? "rotate-90" : ""}`}>
+                          ▶
+                        </span>
+                        <span className={`font-mono text-xs font-bold ${STATUS_COLORS[file.status]}`}>
+                          {STATUS_LABELS[file.status]}
+                        </span>
+                        <span className="text-sm font-mono text-gray-200 truncate">
+                          {file.path}
+                        </span>
+                      </button>
                       {commentCount > 0 && (
                         <span className="text-xs bg-blue-600 text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
                           {commentCount}
                         </span>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => void copyFile(file)}
+                        className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-xs text-gray-300 hover:border-gray-500 hover:text-white transition-colors"
+                        title={
+                          file.source
+                            ? "Copy full file contents"
+                            : "Copy file diff because full file contents are unavailable"
+                        }
+                      >
+                        {copiedFilePath === file.path ? "Copied!" : "Copy file"}
+                      </button>
+                    </div>
 
                     {/* Expanded content */}
                     {isExpanded && (
